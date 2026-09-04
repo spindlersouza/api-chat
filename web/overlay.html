@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Chat Overlay</title>
+<link rel="stylesheet" href="/overlay.css">
+</head>
+<body>
+<div id="chat-container"></div>
+
+<script>
+const MAX_MESSAGES = 4;
+const MESSAGE_TTL_MS = 12000;
+const container = document.getElementById('chat-container');
+
+function renderMessageText(text, emotes) {
+  if (!emotes || emotes.length === 0) {
+    return escapeHtml(text);
+  }
+  let result = escapeHtml(text);
+  emotes.forEach(function (emote) {
+    const code = escapeHtml(emote.code);
+    const img = '<img class="emote" src="' + emote.url + '" alt="' + code + '">';
+    result = result.split(code).join(img);
+  });
+  return result;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function addMessage(msg) {
+  while (container.children.length >= MAX_MESSAGES) {
+    container.removeChild(container.firstChild);
+  }
+
+  const el = document.createElement('div');
+  el.className = 'chat-message ' + msg.platform;
+
+  const badgesHtml = (msg.badges || []).map(function (b) {
+    return '<span class="badge">' + escapeHtml(b) + '</span>';
+  }).join('');
+
+  el.innerHTML =
+    '<div class="platform-tag">' + msg.platform + '</div>' +
+    '<div class="message-body">' +
+      (msg.avatar ? '<img class="avatar" src="' + msg.avatar + '">' : '') +
+      '<div class="message-text">' +
+        '<span class="username">' + escapeHtml(msg.username) + '</span>' +
+        badgesHtml +
+        '<span class="text">' + renderMessageText(msg.message, msg.emotes) + '</span>' +
+      '</div>' +
+    '</div>';
+
+  container.appendChild(el);
+  requestAnimationFrame(function () { el.classList.add('show'); });
+
+  setTimeout(function () {
+    el.classList.add('hide');
+    setTimeout(function () {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }, 400);
+  }, MESSAGE_TTL_MS);
+}
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+  const ws = new WebSocket(proto + location.host + '/ws');
+
+  ws.onmessage = function (event) {
+    try {
+      const msg = JSON.parse(event.data);
+      addMessage(msg);
+    } catch (e) {
+      console.error('invalid message', e);
+    }
+  };
+
+  ws.onclose = function () {
+    setTimeout(connect, 2000);
+  };
+
+  ws.onerror = function () {
+    ws.close();
+  };
+}
+
+connect();
+</script>
+</body>
+</html>

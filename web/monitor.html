@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Chat Monitor</title>
+<link rel="stylesheet" href="/monitor.css">
+</head>
+<body>
+<div id="chat-container"></div>
+
+<script>
+const container = document.getElementById('chat-container');
+
+function isNearBottom() {
+  return container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+}
+
+function renderMessageText(text, emotes) {
+  if (!emotes || emotes.length === 0) {
+    return escapeHtml(text);
+  }
+  let result = escapeHtml(text);
+  emotes.forEach(function (emote) {
+    const code = escapeHtml(emote.code);
+    const img = '<img class="emote" src="' + emote.url + '" alt="' + code + '">';
+    result = result.split(code).join(img);
+  });
+  return result;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function addMessage(msg) {
+  const shouldScroll = isNearBottom();
+
+  const el = document.createElement('div');
+  el.className = 'chat-message ' + msg.platform;
+
+  const badgesHtml = (msg.badges || []).map(function (b) {
+    return '<span class="badge">' + escapeHtml(b) + '</span>';
+  }).join('');
+
+  el.innerHTML =
+    '<div class="platform-tag">' + msg.platform + '</div>' +
+    '<div class="message-body">' +
+      (msg.avatar ? '<img class="avatar" src="' + msg.avatar + '">' : '') +
+      '<div class="message-text">' +
+        '<span class="username">' + escapeHtml(msg.username) + '</span>' +
+        badgesHtml +
+        '<span class="text">' + renderMessageText(msg.message, msg.emotes) + '</span>' +
+      '</div>' +
+    '</div>';
+
+  container.appendChild(el);
+  requestAnimationFrame(function () { el.classList.add('show'); });
+
+  if (shouldScroll) {
+    container.scrollTop = container.scrollHeight;
+  }
+}
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+  const ws = new WebSocket(proto + location.host + '/ws');
+
+  ws.onmessage = function (event) {
+    try {
+      const msg = JSON.parse(event.data);
+      addMessage(msg);
+    } catch (e) {
+      console.error('invalid message', e);
+    }
+  };
+
+  ws.onclose = function () {
+    setTimeout(connect, 2000);
+  };
+
+  ws.onerror = function () {
+    ws.close();
+  };
+}
+
+connect();
+</script>
+</body>
+</html>

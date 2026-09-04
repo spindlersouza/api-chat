@@ -1,0 +1,138 @@
+/* Chat Overlay - customize livremente, recarregue o navegador do OBS pra ver mudancas */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+#chat-container {
+  position: absolute;
+  left: 40px;
+  bottom: 60px;
+  width: 620px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.chat-message {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: rgba(15, 15, 20, 0.72);
+  border-left: 5px solid #999;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateX(-40px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.chat-message.show {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.chat-message.hide {
+  opacity: 0;
+  transform: translateX(-40px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.chat-message.twitch {
+  border-left-color: #9146FF;
+}
+
+.chat-message.youtube {
+  border-left-color: #FF0000;
+}
+
+.chat-message.kick {
+  border-left-color: #53FC18;
+}
+
+.platform-tag {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 700;
+  opacity: 0.65;
+  color: #fff;
+}
+
+.chat-message.twitch .platform-tag {
+  color: #b98bff;
+}
+
+.chat-message.youtube .platform-tag {
+  color: #ff6b6b;
+}
+
+.chat-message.kick .platform-tag {
+  color: #53FC18;
+}
+
+.message-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.message-text {
+  color: #fff;
+  font-size: 20px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.username {
+  font-weight: 700;
+  margin-right: 6px;
+}
+
+.chat-message.twitch .username {
+  color: #b98bff;
+}
+
+.chat-message.youtube .username {
+  color: #ff6b6b;
+}
+
+.chat-message.kick .username {
+  color: #53FC18;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.text {
+  color: #f2f2f2;
+}
+
+.emote {
+  height: 24px;
+  vertical-align: middle;
+  margin: 0 2px;
+}

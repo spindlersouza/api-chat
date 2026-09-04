@@ -1,0 +1,13 @@
+# binarios
+api-chat.exe
+api-chat.exe~
+dist/
+
+# log temporario (recriado a cada execucao)
+api-chat.log
+
+# segredos locais (canais, API keys) - usar .env.example como base
+.env
+
+# anotacoes locais de setup, nao faz parte do codigo
+checklist.md
