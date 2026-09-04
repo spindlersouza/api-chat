@@ -11,7 +11,7 @@ App nativo em Go (sem runtime externo) que unifica o chat da **Twitch**, **YouTu
 - **YouTube**: YouTube Data API v3, com descoberta automatica da live e polling configuravel.
 - **Kick**: websocket publico (Pusher) usado pelo proprio site da Kick, com descoberta automatica do chatroom ou ID manual.
 - **Porta com fallback automatico**: se a porta preferida estiver ocupada, tenta as seguintes e mostra a URL real na janela.
-- **Configuracao local**: salva em `%AppData%\<AppDirName>\config.json`. A API Key do YouTube e criptografada com DPAPI do Windows; a senha de login e guardada como hash salgado (nunca em texto puro).
+- **Configuracao local**: `config.json` criptografado por inteiro com DPAPI do Windows (so abre na mesma conta que salvou), guardado em `%AppData%\api-chat\<hash do caminho do exe>\` — cada copia do executavel fica isolada automaticamente, mesmo rodando na mesma maquina. A senha de login e guardada como hash salgado (nunca em texto puro, nem criptografado reversivel).
 
 ## Rodando
 
@@ -22,11 +22,10 @@ App nativo em Go (sem runtime externo) que unifica o chat da **Twitch**, **YouTu
 
 ## Build por cliente ("sob encomenda")
 
-Cada build pode ter login e pasta de configuracao proprios, pra nao misturar com outras instalacoes na mesma maquina:
+Cada build pode ter login proprio (a config em si ja fica isolada por natureza, ao lado de cada `.exe`):
 
-```
+```sh
 go build -ldflags "-H=windowsgui \
-  -X api-chat/internal/config.AppDirName=api-chat-<cliente> \
   -X api-chat/internal/config.DefaultAuthUser=<usuario> \
   -X api-chat/internal/config.DefaultAuthPass=<senha>" \
   -o dist/<cliente>/api-chat.exe .
@@ -36,7 +35,7 @@ Sem um `.env` na pasta de saida, a tela de configuracao comeca vazia.
 
 ## Estrutura
 
-```
+```text
 main.go                    orquestra: config, janela Fyne, servicos de chat, servidor HTTP
 internal/config/           config local (login + canais), import de .env como semente
 internal/chatmsg/          tipo de mensagem unificado entre as redes

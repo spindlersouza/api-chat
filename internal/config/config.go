@@ -1,5 +1,6 @@
-// Package config gerencia a configuracao local do app (config.json na pasta
-// de config do usuario) e as credenciais de login da tela inicial.
+// Package config gerencia a configuracao local do app: um config.json
+// criptografado (DPAPI do Windows) guardado em %AppData%, numa subpasta
+// derivada do caminho do proprio executavel.
 package config
 
 import (
@@ -8,7 +9,9 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -17,13 +20,10 @@ import (
 	"api-chat/internal/secure"
 )
 
-// AppDirName nomeia a pasta de config local (%AppData%/<AppDirName>).
-// Sobrescrita por -ldflags junto com DefaultAuthUser/DefaultAuthPass pra
-// cada build sob encomenda, pra nao compartilhar config.json entre builds de
-// clientes diferentes testadas na mesma conta do Windows, ex:
-//   go build -ldflags "-X api-chat/internal/config.AppDirName=api-chat-fulano -X api-chat/internal/config.DefaultAuthUser=fulano -X api-chat/internal/config.DefaultAuthPass=segredo"
+// DefaultAuthUser/DefaultAuthPass definem o login padrao de uma build.
+// Sobrescritos por -ldflags em builds sob encomenda pra cada cliente, ex:
+//   go build -ldflags "-X api-chat/internal/config.DefaultAuthUser=fulano -X api-chat/internal/config.DefaultAuthPass=segredo"
 var (
-	AppDirName      = "api-chat"
 	DefaultAuthUser = "admin"
 	DefaultAuthPass = "admin"
 )
@@ -35,16 +35,13 @@ type Config struct {
 
 	Port              string   `json:"port"`
 	TwitchChannel     string   `json:"twitchChannel"`
-	YouTubeAPIKeyEnc  string   `json:"youtubeApiKeyEnc"`
+	YouTubeAPIKey     string   `json:"youtubeApiKey"`
 	YouTubeChannelID  string   `json:"youtubeChannelId"`
 	KickChannel       string   `json:"kickChannel"`
 	KickChatroomID    string   `json:"kickChatroomId"`
 	BotUsernames      []string `json:"botUsernames"`
 	PollMinIntervalMs int      `json:"pollMinIntervalMs"`
 	AlertCooldownMs   int      `json:"alertCooldownMs"`
-
-	// YouTubeAPIKey e a versao decriptada, nunca persistida diretamente.
-	YouTubeAPIKey string `json:"-"`
 }
 
 // Default retorna uma configuracao nova com usuario/senha admin/admin.
@@ -59,12 +56,30 @@ func Default() *Config {
 	return cfg
 }
 
+// UserDataDir retorna a pasta de config dessa instalacao, dentro de
+// %AppData%\api-chat, numa subpasta derivada do caminho absoluto do proprio
+// executavel — cada copia do .exe (dev, release, cliente X) fica isolada
+// automaticamente, sem precisar de flag manual nenhuma, e o arquivo fica
+// escondido no perfil do usuario em vez de do lado do .exe.
 func UserDataDir() (string, error) {
 	base, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(base, AppDirName), nil
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	exePath, err = filepath.Abs(exePath)
+	if err != nil {
+		return "", err
+	}
+
+	sum := sha256.Sum256([]byte(strings.ToLower(exePath)))
+	id := hex.EncodeToString(sum[:])[:12]
+
+	return filepath.Join(base, "api-chat", id), nil
 }
 
 func Path() (string, error) {
@@ -105,51 +120,52 @@ func loadFromDisk() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(p)
+	encrypted, err := os.ReadFile(p)
 	if err != nil {
 		return nil, err
 	}
 
+	data, err := secure.DecryptString(string(encrypted))
+	if err != nil {
+		return nil, fmt.Errorf("decrypting config: %w", err)
+	}
+
 	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	if err := json.Unmarshal([]byte(data), &cfg); err != nil {
 		return nil, err
 	}
 	if cfg.BotUsernames == nil {
 		cfg.BotUsernames = []string{}
 	}
-	if key, err := secure.DecryptString(cfg.YouTubeAPIKeyEnc); err == nil {
-		cfg.YouTubeAPIKey = key
-	}
 	return &cfg, nil
 }
 
-// Save persiste a configuracao localmente (a API key do YouTube e criptografada).
+// Save persiste a configuracao localmente. O arquivo inteiro e criptografado
+// com DPAPI do Windows (so decriptografa na mesma conta que salvou).
 func (c *Config) Save() error {
 	dir, err := UserDataDir()
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 
-	enc, err := secure.EncryptString(c.YouTubeAPIKey)
-	if err != nil {
-		enc = c.YouTubeAPIKey
-	}
-	out := *c
-	out.YouTubeAPIKeyEnc = enc
-
-	data, err := json.MarshalIndent(out, "", "  ")
+	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return err
+	}
+
+	encrypted, err := secure.EncryptString(string(data))
+	if err != nil {
+		return fmt.Errorf("encrypting config: %w", err)
 	}
 
 	p, err := Path()
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, data, 0o600)
+	return os.WriteFile(p, []byte(encrypted), 0o600)
 }
 
 // SetPassword define usuario/senha, guardando so um hash salgado (nunca a senha).
@@ -209,11 +225,18 @@ func (c *Config) SetBotUsernamesText(raw string) {
 	c.BotUsernames = names
 }
 
-// importFromDotEnv preenche cfg com valores de um .env na pasta atual, se
-// existir (compatibilidade com configuracoes anteriores a tela de config).
+// importFromDotEnv preenche cfg com valores de um .env ao lado do executavel,
+// se existir (compatibilidade com configuracoes anteriores a tela de
+// config). Usa a pasta do .exe, nao o diretorio de trabalho do processo, pra
+// nao herdar um .env de onde o app foi lancado.
 func importFromDotEnv(cfg *Config) {
+	envPath := ".env"
+	if exePath, err := os.Executable(); err == nil {
+		envPath = filepath.Join(filepath.Dir(exePath), ".env")
+	}
+
 	env := map[string]string{}
-	loadDotEnvInto(".env", env)
+	loadDotEnvInto(envPath, env)
 	if len(env) == 0 {
 		return
 	}
